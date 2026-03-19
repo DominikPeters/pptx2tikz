@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>pptx2tikz – Convert PowerPoint to TikZ</title>
+<style>
+  :root {
+    --bg: #f8f9fa; --card: #fff; --border: #dee2e6; --accent: #0d6efd;
+    --text: #212529; --muted: #6c757d; --radius: 8px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg); color: var(--text); line-height: 1.5; padding: 1.5rem; max-width: 1100px; margin: 0 auto; }
+  h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
+  h1 span { color: var(--muted); font-weight: 400; font-size: 1rem; }
+  .subtitle { color: var(--muted); margin-bottom: 1.5rem; font-size: 0.9rem; }
+  .subtitle a { color: var(--accent); text-decoration: none; }
+
+  /* Drop zone */
+  #dropzone {
+    border: 2px dashed var(--border); border-radius: var(--radius); padding: 3rem 1rem;
+    text-align: center; cursor: pointer; transition: border-color .2s, background .2s;
+    background: var(--card); margin-bottom: 1.5rem;
+  }
+  #dropzone.hover { border-color: var(--accent); background: #e7f1ff; }
+  #dropzone p { color: var(--muted); }
+  #dropzone .big { font-size: 1.1rem; color: var(--text); margin-bottom: 0.25rem; }
+
+  /* Controls */
+  .controls { display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-end; margin-bottom: 1rem; }
+  .control-group { display: flex; flex-direction: column; gap: 0.25rem; }
+  .control-group label { font-size: 0.8rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; }
+  input[type=text], select { padding: 0.4rem 0.6rem; border: 1px solid var(--border); border-radius: 4px; font-size: 0.9rem; }
+  input[type=text] { width: 140px; }
+  .checkbox-group { flex-direction: row; align-items: center; gap: 0.4rem; align-self: center; }
+  .checkbox-group label { text-transform: none; font-weight: 400; font-size: 0.9rem; color: var(--text); }
+  button { padding: 0.45rem 1.2rem; background: var(--accent); color: #fff; border: none; border-radius: 4px;
+    font-size: 0.9rem; cursor: pointer; align-self: center; }
+  button:hover { background: #0b5ed7; }
+  button:disabled { background: var(--muted); cursor: default; }
+
+  /* Slide thumbnails */
+  #slides-bar { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem; }
+  .slide-thumb {
+    width: 100px; height: 56px; border: 2px solid var(--border); border-radius: 4px;
+    display: flex; align-items: center; justify-content: center; font-size: 0.8rem;
+    cursor: pointer; background: var(--card); color: var(--muted); transition: border-color .15s;
+    position: relative; overflow: hidden;
+  }
+  .slide-thumb.selected { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+  .slide-thumb:hover { border-color: var(--accent); }
+
+  /* Output */
+  #output-section { display: none; }
+  #output-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; }
+  #output-header h2 { font-size: 1.1rem; }
+  .copy-btn { background: none; border: 1px solid var(--border); color: var(--text); padding: 0.3rem 0.8rem; font-size: 0.8rem; }
+  .copy-btn:hover { background: var(--bg); }
+  pre {
+    background: #1e1e1e; color: #d4d4d4; padding: 1rem; border-radius: var(--radius);
+    overflow-x: auto; font-size: 0.82rem; line-height: 1.6; max-height: 70vh; white-space: pre;
+  }
+  #status { color: var(--muted); font-size: 0.9rem; margin-bottom: 0.5rem; }
+  #image-info { color: var(--muted); font-size: 0.85rem; margin-top: 0.5rem; }
+
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<h1>pptx2tikz <span>demo</span></h1>
+<p class="subtitle">Convert PowerPoint slides to TikZ/LaTeX &mdash; <a href="https://github.com/dominikpeters/pptx2tikz">GitHub</a></p>
+
+<div id="dropzone" tabindex="0">
+  <p class="big">Drop a .pptx file here or click to open</p>
+  <p>Runs entirely in your browser &mdash; no upload</p>
+</div>
+<input type="file" id="file-input" accept=".pptx" hidden>
+
+<div id="slides-bar"></div>
+
+<div class="controls hidden" id="controls">
+  <div class="control-group">
+    <label>Image dir</label>
+    <input type="text" id="opt-imagedir" value="images" placeholder="images">
+  </div>
+  <div class="control-group checkbox-group">
+    <input type="checkbox" id="opt-noimages">
+    <label for="opt-noimages">No images (placeholders)</label>
+  </div>
+  <div class="control-group checkbox-group">
+    <input type="checkbox" id="opt-layout">
+    <label for="opt-layout">Include layout elements</label>
+  </div>
+  <div class="control-group checkbox-group">
+    <input type="checkbox" id="opt-xcolor">
+    <label for="opt-xcolor">xcolor RGB convert</label>
+  </div>
+  <button id="convert-btn" disabled>Convert</button>
+</div>
+
+<p id="status"></p>
+
+<div id="output-section">
+  <div id="output-header">
+    <h2 id="output-title">Output</h2>
+    <button class="copy-btn" id="copy-btn">Copy to clipboard</button>
+  </div>
+  <pre><code id="output"></code></pre>
+  <p id="image-info"></p>
+</div>
+
+<script type="module">
+import { parse, convertSlideToTikZ } from './index.js';
+
+let parsed = null;
+let selectedSlide = 0;
+
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('file-input');
+const slidesBar = document.getElementById('slides-bar');
+const controls = document.getElementById('controls');
+const convertBtn = document.getElementById('convert-btn');
+const status = document.getElementById('status');
+const outputSection = document.getElementById('output-section');
+const outputEl = document.getElementById('output');
+const outputTitle = document.getElementById('output-title');
+const imageInfo = document.getElementById('image-info');
+const copyBtn = document.getElementById('copy-btn');
+
+// Drop zone
+dropzone.addEventListener('click', () => fileInput.click());
+dropzone.addEventListener('keydown', e => { if (e.key === 'Enter') fileInput.click(); });
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('hover'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('hover'));
+dropzone.addEventListener('drop', e => { e.preventDefault(); dropzone.classList.remove('hover'); handleFile(e.dataTransfer.files[0]); });
+fileInput.addEventListener('change', () => { if (fileInput.files[0]) handleFile(fileInput.files[0]); });
+
+async function handleFile(file) {
+  if (!file || !file.name.endsWith('.pptx')) { status.textContent = 'Please select a .pptx file.'; return; }
+  status.textContent = 'Parsing…';
+  outputSection.style.display = 'none';
+  try {
+    const buf = await file.arrayBuffer();
+    parsed = await parse(buf);
+    status.textContent = `Loaded "${file.name}" — ${parsed.slides.length} slide(s)`;
+    buildSlideBar();
+    controls.classList.remove('hidden');
+    convertBtn.disabled = false;
+    selectedSlide = 0;
+    highlightSlide(0);
+  } catch (err) {
+    status.textContent = 'Error parsing file: ' + err.message;
+    console.error(err);
+  }
+}
+
+function buildSlideBar() {
+  slidesBar.innerHTML = '';
+  parsed.slides.forEach((_, i) => {
+    const el = document.createElement('div');
+    el.className = 'slide-thumb';
+    el.textContent = `Slide ${i + 1}`;
+    el.addEventListener('click', () => { selectedSlide = i; highlightSlide(i); });
+    el.addEventListener('dblclick', () => { selectedSlide = i; highlightSlide(i); doConvert(); });
+    slidesBar.appendChild(el);
+  });
+}
+
+function highlightSlide(idx) {
+  slidesBar.querySelectorAll('.slide-thumb').forEach((el, i) => el.classList.toggle('selected', i === idx));
+}
+
+convertBtn.addEventListener('click', doConvert);
+
+function doConvert() {
+  if (!parsed) return;
+  const opts = {
+    noImages: document.getElementById('opt-noimages').checked,
+    imageDir: document.getElementById('opt-imagedir').value || 'images',
+    includeLayoutElements: document.getElementById('opt-layout').checked,
+    xcolorRgbConvert: document.getElementById('opt-xcolor').checked,
+  };
+  try {
+    const { tex, images } = convertSlideToTikZ(parsed.slides[selectedSlide], parsed.size, opts);
+    outputEl.textContent = tex;
+    outputTitle.textContent = `Slide ${selectedSlide + 1} — LaTeX output`;
+    imageInfo.textContent = images && images.length ? `${images.length} image(s) extracted (not shown here).` : '';
+    outputSection.style.display = 'block';
+    outputSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } catch (err) {
+    status.textContent = 'Conversion error: ' + err.message;
+    console.error(err);
+  }
+}
+
+copyBtn.addEventListener('click', () => {
+  navigator.clipboard.writeText(outputEl.textContent).then(() => {
+    copyBtn.textContent = 'Copied!';
+    setTimeout(() => copyBtn.textContent = 'Copy to clipboard', 1500);
+  });
+});
+</script>
+</body>
+</html>
