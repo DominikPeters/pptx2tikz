@@ -19,26 +19,23 @@ export class ColorRegistry {
     const rgb6 = clean.slice(0, 6)
     const alpha = clean.length === 8 ? parseInt(clean.slice(6, 8), 16) / 255 : 1
 
+    if (this.options.xcolorRgbConvert) {
+      try {
+        const r = parseInt(rgb6.slice(0, 2), 16)
+        const g = parseInt(rgb6.slice(2, 4), 16)
+        const b = parseInt(rgb6.slice(4, 6), 16)
+        const converted = rgbToXcolorExpression({ r, g, b }, { mode: 'release' })
+        if (converted?.expression) {
+          return { name: converted.expression, opacity: alpha }
+        }
+      } catch (err) {
+        // Fall back to named color registration below if conversion fails.
+      }
+    }
+
     if (!this.colors.has(rgb6)) {
       const name = `clr${this.counter++}`
-      const entry = { name, model: 'HTML', value: rgb6 }
-
-      if (this.options.xcolorRgbConvert) {
-        try {
-          const r = parseInt(rgb6.slice(0, 2), 16)
-          const g = parseInt(rgb6.slice(2, 4), 16)
-          const b = parseInt(rgb6.slice(4, 6), 16)
-          const converted = rgbToXcolorExpression({ r, g, b }, { mode: 'release' })
-          if (converted?.expression) {
-            entry.model = 'xcolor'
-            entry.value = converted.expression
-          }
-        } catch (err) {
-          // Keep HTML fallback for robustness if conversion fails for any reason.
-        }
-      }
-
-      this.colors.set(rgb6, entry)
+      this.colors.set(rgb6, { name, model: 'HTML', value: rgb6 })
     }
     return { name: this.colors.get(rgb6).name, opacity: alpha }
   }
