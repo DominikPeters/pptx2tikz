@@ -17,7 +17,11 @@ export function getBorder(node, elType, warpObj) {
 
   let borderWidth = isNoFill ? 0 : (parseInt(getTextByPathList(lineNode, ['attrs', 'w'])) / 12700)
   if (isNaN(borderWidth)) {
-    if (lineNode) borderWidth = 0
+    // No explicit width. Only use the PPTX default (0.75pt) when the line node has
+    // an explicit fill — otherwise treat as no border (e.g. text boxes with an empty <a:ln>).
+    const hasLineFill = lineNode && !!getTextByPathList(lineNode, ['a:solidFill'])
+    if (hasLineFill) borderWidth = 0.75
+    else if (lineNode) borderWidth = 0
     else if (elType !== 'obj') borderWidth = 0
     else borderWidth = 1
   }

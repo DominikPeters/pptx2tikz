@@ -15,6 +15,7 @@ import { findOMath, latexFormart, parseOMath } from './math'
 import { getShapePath } from './shapePath'
 import { parseTransition, findTransitionNode } from './animation'
 import { getSmartArtTextData } from './diagram'
+import { getSchemeColorFromTheme } from './schemeColor'
 
 export async function parse(file) {
   const slides = []
@@ -37,6 +38,252 @@ export async function parse(file) {
       width,
       height,
     },
+  }
+}
+
+function resolveZipTarget(baseFilePath, targetPath) {
+  if (!targetPath) return ''
+  if (targetPath.startsWith('/')) return targetPath.slice(1)
+  if (/^[a-zA-Z]+:\/\//.test(targetPath)) return targetPath
+
+  const parts = baseFilePath.split('/').slice(0, -1)
+  const targetParts = targetPath.split('/')
+  for (const part of targetParts) {
+    if (!part || part === '.') continue
+    if (part === '..') {
+      if (parts.length > 0) parts.pop()
+      continue
+    }
+    parts.push(part)
+  }
+  return parts.join('/')
+}
+
+function wrapClipboardThemeAsTheme(themeContent) {
+  const clipboardTheme = getTextByPathList(themeContent, ['a:clipboardTheme'])
+  if (!clipboardTheme) return themeContent
+
+  return {
+    'a:theme': {
+      'a:themeElements': clipboardTheme['a:themeElements'],
+      'a:clrMap': clipboardTheme['a:clrMap'],
+    },
+  }
+}
+
+function readThemeColors(themeContent) {
+  const themeColors = []
+  const clrScheme = getTextByPathList(themeContent, ['a:theme', 'a:themeElements', 'a:clrScheme'])
+  if (clrScheme) {
+    for (let i = 1; i <= 6; i++) {
+      if (clrScheme[`a:accent${i}`] === undefined) break
+      const color = getTextByPathList(clrScheme, [`a:accent${i}`, 'a:srgbClr', 'attrs', 'val'])
+      if (color) themeColors.push('#' + color)
+    }
+  }
+  return themeColors
+}
+
+function ensureArray(node) {
+  if (!node) return []
+  return Array.isArray(node) ? node : [node]
+}
+
+function createEmptyTables() {
+  return {
+    idTable: {},
+    idxTable: {},
+    typeTable: {},
+  }
+}
+
+function normalizeGvmlShapeNode(node) {
+  if (!node || typeof node !== 'object') return null
+
+  const normalizedNode = {
+    attrs: node['attrs'] ? { ...node['attrs'] } : {},
+  }
+
+  if (node['a:nvSpPr']) {
+    const nvSpPrNode = node['a:nvSpPr']
+    normalizedNode['p:nvSpPr'] = {}
+    if (nvSpPrNode['a:cNvPr']) normalizedNode['p:nvSpPr']['p:cNvPr'] = nvSpPrNode['a:cNvPr']
+    if (nvSpPrNode['a:cNvSpPr']) normalizedNode['p:nvSpPr']['p:cNvSpPr'] = nvSpPrNode['a:cNvSpPr']
+    if (nvSpPrNode['a:nvPr']) normalizedNode['p:nvSpPr']['p:nvPr'] = nvSpPrNode['a:nvPr']
+  }
+  if (node['a:spPr']) normalizedNode['p:spPr'] = node['a:spPr']
+  if (node['a:style']) normalizedNode['p:style'] = node['a:style']
+  if (node['a:txBody']) normalizedNode['p:txBody'] = node['a:txBody']
+
+  const txSpNode = node['a:txSp']
+  if (txSpNode) {
+    if (txSpNode['a:txBody']) normalizedNode['p:txBody'] = txSpNode['a:txBody']
+    if (txSpNode['a:txXfrm']) normalizedNode['p:txXfrm'] = txSpNode['a:txXfrm']
+  }
+
+  return normalizedNode
+}
+
+function normalizeGvmlGroupNode(node, path, warn) {
+  if (!node || typeof node !== 'object') return null
+
+  const normalizedNode = {
+    attrs: node['attrs'] ? { ...node['attrs'] } : {},
+  }
+
+  if (node['a:grpSpPr']) normalizedNode['p:grpSpPr'] = node['a:grpSpPr']
+
+  const childMap = [
+    ['a:sp', 'p:sp'],
+    ['a:grpSp', 'p:grpSp'],
+  ]
+  for (const [sourceKey, targetKey] of childMap) {
+    if (!node[sourceKey]) continue
+    const sourceChildren = ensureArray(node[sourceKey])
+    const normalizedChildren = sourceChildren
+      .map((child, idx) => (
+        sourceKey === 'a:sp'
+          ? normalizeGvmlShapeNode(child)
+          : normalizeGvmlGroupNode(child, `${path}.${sourceKey}[${idx}]`, warn)
+      ))
+      .filter(Boolean)
+    if (normalizedChildren.length === 1) normalizedNode[targetKey] = normalizedChildren[0]
+    else if (normalizedChildren.length > 1) normalizedNode[targetKey] = normalizedChildren
+  }
+
+  for (const key in node) {
+    if (key === 'attrs' || key === 'a:nvGrpSpPr' || key === 'a:grpSpPr' || key === 'a:sp' || key === 'a:grpSp') continue
+    warn(`${path}.${key}: unsupported GVML group child, skipped`)
+  }
+
+  return normalizedNode
+}
+
+export async function parseClipboardGVML(file, options = {}) {
+  const zip = await JSZip.loadAsync(file)
+  const warnings = []
+  const strict = options.strict === true
+  const warn = message => {
+    warnings.push(message)
+    if (strict) throw new Error(message)
+  }
+
+  const drawingPath = 'clipboard/drawings/drawing1.xml'
+  const drawingRelsPath = 'clipboard/drawings/_rels/drawing1.xml.rels'
+  const themeFallbackPath = 'clipboard/theme/theme1.xml'
+
+  const drawingContent = await readXmlFile(zip, drawingPath)
+  if (!drawingContent) throw new Error('Invalid GVML clipboard zip: missing clipboard/drawings/drawing1.xml')
+
+  const drawingRelsContent = await readXmlFile(zip, drawingRelsPath)
+  let relationshipArray = getTextByPathList(drawingRelsContent, ['Relationships', 'Relationship'])
+  relationshipArray = ensureArray(relationshipArray)
+
+  const slideResObj = {}
+  let themePath = themeFallbackPath
+  for (const rel of relationshipArray) {
+    const attrs = rel && rel['attrs']
+    if (!attrs) continue
+    const typeRaw = attrs['Type'] || ''
+    const relType = typeRaw.replace('http://schemas.openxmlformats.org/officeDocument/2006/relationships/', '')
+    const relId = attrs['Id']
+    const isExternal = attrs['TargetMode'] === 'External'
+    const target = attrs['Target'] || ''
+    const resolvedTarget = isExternal ? target : resolveZipTarget(drawingPath, target)
+
+    if (relId) {
+      slideResObj[relId] = {
+        type: relType,
+        target: resolvedTarget,
+      }
+    }
+    if (typeRaw === 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme' && resolvedTarget) {
+      themePath = resolvedTarget
+    }
+  }
+
+  const rawThemeContent = await readXmlFile(zip, themePath)
+  if (!rawThemeContent) warn(`Missing clipboard theme at ${themePath}, color resolution may be incomplete`)
+  const themeContent = rawThemeContent ? wrapClipboardThemeAsTheme(rawThemeContent) : {}
+  const themeColors = readThemeColors(themeContent)
+
+  const lockedCanvas = getTextByPathList(drawingContent, ['a:graphic', 'a:graphicData', 'lc:lockedCanvas'])
+  if (!lockedCanvas) throw new Error('Invalid GVML clipboard zip: missing lockedCanvas in drawing1.xml')
+
+  const ext = getTextByPathList(lockedCanvas, ['a:grpSpPr', 'a:xfrm', 'a:ext', 'attrs']) || {}
+  const width = (parseInt(ext['cx']) || 0) * RATIO_EMUs_Points
+  const height = (parseInt(ext['cy']) || 0) * RATIO_EMUs_Points
+  if (!width || !height) warn('lockedCanvas has missing/zero extents; output size may be invalid')
+
+  const emptyTables = createEmptyTables()
+  const warpObj = {
+    zip,
+    slideLayoutContent: null,
+    slideLayoutTables: emptyTables,
+    slideMasterContent: null,
+    slideMasterTables: emptyTables,
+    slideContent: drawingContent,
+    tableStyles: {},
+    slideResObj,
+    slideMasterTextStyles: undefined,
+    layoutResObj: {},
+    masterResObj: {},
+    themeContent,
+    themeResObj: {},
+    digramFileContent: {},
+    diagramResObj: {},
+    diagramContent: {
+      data: null,
+      layout: null,
+      quickStyle: null,
+      colors: null,
+      drawing: null,
+    },
+    defaultTextStyle: undefined,
+  }
+
+  const elements = []
+  const parseTopLevelChildren = async (sourceKey, targetKey, normalizer) => {
+    if (!lockedCanvas[sourceKey]) return
+    const children = ensureArray(lockedCanvas[sourceKey])
+    for (let i = 0; i < children.length; i++) {
+      const normalized = normalizer(children[i], `lockedCanvas.${sourceKey}[${i}]`, warn)
+      if (!normalized) {
+        warn(`lockedCanvas.${sourceKey}[${i}]: failed to normalize node, skipped`)
+        continue
+      }
+      const ret = await processNodesInSlide(targetKey, normalized, warpObj, 'slide')
+      if (ret) elements.push(ret)
+    }
+  }
+
+  await parseTopLevelChildren('a:sp', 'p:sp', (node) => normalizeGvmlShapeNode(node))
+  await parseTopLevelChildren('a:grpSp', 'p:grpSp', normalizeGvmlGroupNode)
+  if (lockedCanvas['a:pic']) warn('lockedCanvas.a:pic: unsupported in v1, skipped')
+  if (lockedCanvas['a:graphicFrame']) warn('lockedCanvas.a:graphicFrame: unsupported in v1, skipped')
+  if (lockedCanvas['a:cxnSp']) warn('lockedCanvas.a:cxnSp: unsupported in v1, skipped')
+
+  for (const key in lockedCanvas) {
+    if (key === 'attrs' || key === 'a:nvGrpSpPr' || key === 'a:grpSpPr' || key === 'a:sp' || key === 'a:grpSp' || key === 'a:pic' || key === 'a:graphicFrame' || key === 'a:cxnSp') continue
+    warn(`lockedCanvas.${key}: unsupported GVML node, skipped`)
+  }
+
+  return {
+    slides: [
+      {
+        fill: null,
+        elements,
+        layoutElements: [],
+        note: '',
+        transition: null,
+      },
+    ],
+    themeColors,
+    size: {
+      width,
+      height,
+    },
+    warnings,
   }
 }
 
@@ -583,6 +830,42 @@ async function processMathNode(node, warpObj, source) {
   const blipFill = getTextByPathList(fallback, ['p:sp', 'p:spPr', 'a:blipFill'])
   const picBase64 = await getPicFill(source, blipFill, warpObj)
 
+  // Math runs can be represented either as a single object or an array of m:r nodes.
+  const findFirstNodeByTag = (value, tagName) => {
+    if (!value || typeof value !== 'object') return null
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        const match = findFirstNodeByTag(item, tagName)
+        if (match) return match
+      }
+      return null
+    }
+    if (value[tagName]) {
+      const tagged = value[tagName]
+      return Array.isArray(tagged) ? tagged[0] : tagged
+    }
+    for (const child of Object.values(value)) {
+      const match = findFirstNodeByTag(child, tagName)
+      if (match) return match
+    }
+    return null
+  }
+
+  // Prefer an explicit math run, but fall back to the paragraph end properties when needed.
+  const mathRoot = getTextByPathList(choice, ['p:sp', 'p:txBody', 'a:p', 'a14:m'])
+  const rPrNode = findFirstNodeByTag(mathRoot, 'a:rPr') || getTextByPathList(choice, ['p:sp', 'p:txBody', 'a:p', 'a:endParaRPr'])
+  let mathColor
+  if (rPrNode) {
+    let colorVal = getTextByPathList(rPrNode, ['a:solidFill', 'a:srgbClr', 'attrs', 'val'])
+    if (!colorVal) {
+      const schemeClr = getTextByPathList(rPrNode, ['a:solidFill', 'a:schemeClr', 'attrs', 'val'])
+      if (schemeClr) colorVal = getSchemeColorFromTheme('a:' + schemeClr, warpObj)
+    }
+    if (colorVal) mathColor = `#${colorVal}`
+  }
+  const mathFontSzRaw = rPrNode && getTextByPathList(rPrNode, ['attrs', 'sz'])
+  const mathFontSize = mathFontSzRaw ? parseInt(mathFontSzRaw) / 100 : undefined
+
   let text = ''
   if (getTextByPathList(choice, ['p:sp', 'p:txBody', 'a:p', 'a:r'])) {
     const sp = getTextByPathList(choice, ['p:sp'])
@@ -593,12 +876,14 @@ async function processMathNode(node, warpObj, source) {
     type: 'math',
     top,
     left,
-    width, 
+    width,
     height,
     latex,
     picBase64,
     text,
     order,
+    color: mathColor,
+    fontSize: mathFontSize,
   }
 }
 
@@ -889,6 +1174,14 @@ async function processPicNode(node, warpObj, source) {
   const { width, height } = getSize(xfrmNode, undefined, undefined)
   const src = `data:${mimeType};base64,${base64ArrayBuffer(imgArrayBuffer)}`
 
+  const svgRid = getTextByPathList(node, ['p:blipFill', 'a:blip', 'a:extLst', 'a:ext', 'asvg:svgBlip', 'attrs', 'r:embed'])
+  let svgSrc
+  if (svgRid && resObj[svgRid]) {
+    const svgName = resObj[svgRid]['target']
+    const svgArrayBuffer = await zip.file(svgName).async('arraybuffer')
+    svgSrc = `data:image/svg+xml;base64,${base64ArrayBuffer(svgArrayBuffer)}`
+  }
+
   const isFlipV = getTextByPathList(xfrmNode, ['attrs', 'flipV']) === '1'
   const isFlipH = getTextByPathList(xfrmNode, ['attrs', 'flipH']) === '1'
 
@@ -1012,6 +1305,7 @@ async function processPicNode(node, warpObj, source) {
     borderStrokeDasharray: strokeDasharray,
   }
 
+  if (svgSrc) imageData.svgSrc = svgSrc
   if (filters) imageData.filters = filters
   if (link) imageData.link = link
 
