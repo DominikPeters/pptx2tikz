@@ -1,22 +1,17 @@
 import { nodeResolve } from '@rollup/plugin-node-resolve'
 import commonjs from '@rollup/plugin-commonjs'
+import json from '@rollup/plugin-json'
 
 const onwarn = warning => {
   if (warning.code === 'CIRCULAR_DEPENDENCY') return
   console.warn(`(!) ${warning.message}`)
 }
 
-const plugins = [
-  nodeResolve({ preferBuiltins: true }),
-  commonjs(),
-]
-
 export default [
-  // Library build (ESM + CJS)
+  // Library build (ESM + CJS) — browser-compatible, all deps bundled
   {
     input: 'src/index.js',
     onwarn,
-    external: ['jszip', 'svg2tikz', 'tinycolor2', 'txml', 'xcolor-rgb-convert'],
     output: [
       {
         file: 'dist/index.js',
@@ -29,18 +24,27 @@ export default [
         sourcemap: true,
       },
     ],
-    plugins,
+    plugins: [
+      nodeResolve({ preferBuiltins: false, browser: true }),
+      commonjs(),
+      json(),
+    ],
   },
-  // CLI build (standalone, dependencies bundled)
+  // CLI build — Node.js, npm deps kept external
   {
     input: 'bin/pptx2tikz.js',
     onwarn,
+    external: id => !id.startsWith('.') && !id.startsWith('/') && !id.endsWith('pptx2tikz.js'),
     output: {
       file: 'dist/pptx2tikz.js',
       format: 'es',
       banner: '#!/usr/bin/env node',
       sourcemap: true,
     },
-    plugins,
+    plugins: [
+      nodeResolve({ preferBuiltins: true }),
+      commonjs(),
+      json(),
+    ],
   },
 ]

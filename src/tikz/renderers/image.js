@@ -1,15 +1,5 @@
 import { svgToTikz } from 'svg2tikz'
-import { installNodeSvgEnvironment } from 'svg2tikz/node-env'
 import { pt2cm } from '../utils/transform.js'
-
-let svgEnvInstalled = false
-
-function ensureSvgEnv() {
-  if (!svgEnvInstalled) {
-    installNodeSvgEnvironment()
-    svgEnvInstalled = true
-  }
-}
 
 function extractViewBox(svgString) {
   const m = svgString.match(/viewBox\s*=\s*["']\s*([\d.+-]+)\s+([\d.+-]+)\s+([\d.+-]+)\s+([\d.+-]+)\s*["']/)
@@ -26,15 +16,13 @@ function renderSvgAsTikz(element, imageCollector, options) {
 
   let svgString
   try {
-    svgString = Buffer.from(dataUrlMatch[1], 'base64').toString('utf8')
+    svgString = atob(dataUrlMatch[1])
   } catch (e) {
     return null
   }
 
   const vb = extractViewBox(svgString)
   if (!vb || vb.w === 0 || vb.h === 0) return null
-
-  ensureSvgEnv()
 
   let tikzFull
   try {

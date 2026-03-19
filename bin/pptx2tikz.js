@@ -5,8 +5,11 @@ import { dirname, resolve, join, basename } from 'path'
 import { tmpdir } from 'os'
 import { execSync } from 'child_process'
 import JSZip from 'jszip'
+import { installNodeSvgEnvironment } from 'svg2tikz/node-env'
 import { parse, parseClipboardGVML } from '../pptxtojson/src/pptxtojson.js'
 import { convertSlideToTikZ } from '../src/tikz/index.js'
+
+installNodeSvgEnvironment()
 
 async function main() {
   const args = process.argv.slice(2)
