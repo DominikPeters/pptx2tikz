@@ -1,0 +1,39 @@
+{
+  "name": "pptx2tikz",
+  "version": "0.1.0",
+  "description": "Convert PowerPoint (.pptx) slides to TikZ/LaTeX",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "bin": {
+    "pptx2tikz": "./dist/pptx2tikz.js"
+  },
+  "scripts": {
+    "build": "rollup -c",
+    "dev": "rollup -c -w",
+    "clean": "rimraf dist"
+  },
+  "keywords": ["pptx", "powerpoint", "tikz", "latex", "converter"],
+  "author": "Dominik Peters",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/DominikPeters/pptx2tikz"
+  },
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org"
+  },
+  "dependencies": {
+    "jszip": "^3.10.1",
+    "svg2tikz": "^0.1.1",
+    "tinycolor2": "1.6.0",
+    "txml": "^5.1.1",
+    "xcolor-rgb-convert": "^1.0.0"
+  },
+  "devDependencies": {
+    "@rollup/plugin-commonjs": "^23.0.2",
+    "@rollup/plugin-node-resolve": "^15.0.1",
+    "rimraf": "^5.0.0",
+    "rollup": "^3.3.0"
+  }
+}
