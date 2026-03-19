@@ -5,6 +5,15 @@
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
+  "exports": {
+    "import": "./dist/index.js",
+    "require": "./dist/index.cjs"
+  },
+  "files": [
+    "dist/**/*.js",
+    "dist/**/*.cjs",
+    "LICENSE"
+  ],
   "bin": {
     "pptx2tikz": "./dist/pptx2tikz.js"
   },
