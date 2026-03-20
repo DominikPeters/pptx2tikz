@@ -1,6 +1,5 @@
-export function generatePreamble(colorRegistry, hasImages, hasLinks, hasSvgTikz = false) {
+function commonPackages(hasImages, hasLinks, hasSvgTikz) {
   const lines = [
-    '\\documentclass[border=0pt]{standalone}',
     '\\usepackage[utf8]{inputenc}',
     '\\usepackage[T1]{fontenc}',
     '\\usepackage{tikz}',
@@ -9,21 +8,39 @@ export function generatePreamble(colorRegistry, hasImages, hasLinks, hasSvgTikz 
     '\\usepackage[normalem]{ulem}',
     '\\usetikzlibrary{shapes.geometric,calc,positioning,shadows.blur,patterns,shadings}',
   ]
+  if (hasImages || hasSvgTikz) lines.push('\\usepackage{graphicx}')
+  if (hasLinks) lines.push('\\usepackage{hyperref}')
+  return lines
+}
 
-  if (hasImages || hasSvgTikz) {
-    lines.push('\\usepackage{graphicx}')
-  }
-  if (hasLinks) {
-    lines.push('\\usepackage{hyperref}')
-  }
-
-  lines.push('')
-
-  const colorDefs = colorRegistry.getDefinitions()
-  if (colorDefs) {
-    lines.push(colorDefs)
+export function generatePreamble(colorRegistry, hasImages, hasLinks, hasSvgTikz = false) {
+  const lines = [
+    '\\documentclass[border=0pt]{standalone}',
+    ...commonPackages(hasImages, hasLinks, hasSvgTikz),
+    '',
+  ]
+  const defs = colorRegistry.getDefinitions()
+  if (defs) {
+    lines.push(defs)
     lines.push('')
   }
+  return lines.join('\n')
+}
 
+export function generateContainerPreamble(colorRegistry, size, hasImages, hasLinks, hasSvgTikz = false) {
+  const w = (size.width / 28.3465).toFixed(4)
+  const h = (size.height / 28.3465).toFixed(4)
+  const lines = [
+    '\\documentclass{article}',
+    `\\usepackage[paperwidth=${w}cm,paperheight=${h}cm,margin=0pt]{geometry}`,
+    '\\usepackage{parskip}',
+    ...commonPackages(hasImages, hasLinks, hasSvgTikz),
+    '',
+  ]
+  const defs = colorRegistry.getDefinitions()
+  if (defs) {
+    lines.push(defs)
+    lines.push('')
+  }
   return lines.join('\n')
 }

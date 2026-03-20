@@ -1,5 +1,5 @@
 import { ColorRegistry } from './utils/color.js'
-import { generatePreamble } from './preamble.js'
+import { generateContainerPreamble } from './preamble.js'
 import { fillToTikz } from './utils/fill.js'
 import { pt2cm } from './utils/transform.js'
 import { renderText } from './renderers/text.js'
@@ -71,6 +71,8 @@ function hasLinks(elements) {
   return false
 }
 
+// Returns { body, images } — just the tikzpicture, no preamble.
+// Pass options.sharedColors (a Map) to share a color registry across slides.
 export function convertSlideToTikZ(slide, size, options = {}) {
   const registry = new ColorRegistry(options)
   const imageCollector = []
@@ -81,40 +83,59 @@ export function convertSlideToTikZ(slide, size, options = {}) {
     elements = [...slide.layoutElements, ...elements]
   }
 
-  // Sort by z-order
   elements.sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
 
-  // Render background
   const backgroundTikz = renderBackground(slide.fill, size, registry)
 
-  // Render elements
   const elementsTikz = elements
     .map(el => renderElement(el, registry, imageCollector, options))
     .filter(Boolean)
 
-  // Check for features that need extra packages
-  const hasImg = imageCollector.length > 0
-  const hasSvgTikz = !!imageCollector.hasSvgTikz
-  const hasLnk = hasLinks(elements)
-
-  // Generate preamble (after all colors are registered)
-  const preamble = generatePreamble(registry, hasImg, hasLnk, hasSvgTikz)
-
-  const body = [
-    '\\begin{document}',
+  const lines = [
     `\\begin{tikzpicture}[x=1cm, y=1cm]`,
     `  \\clip (0,0) rectangle (${pt2cm(size.width)},${pt2cm(size.height)});`,
   ]
-
-  if (backgroundTikz) body.push(backgroundTikz)
-  body.push(...elementsTikz)
-
-  body.push('\\end{tikzpicture}')
-  body.push('\\end{document}')
-  body.push('')
+  if (backgroundTikz) lines.push(backgroundTikz)
+  lines.push(...elementsTikz)
+  lines.push('\\end{tikzpicture}')
 
   return {
-    tex: preamble + body.join('\n'),
+    body: lines.join('\n'),
     images: imageCollector,
+  }
+}
+
+// Returns { tex, images } — a complete compilable LaTeX document with all slides.
+export function convertSlidesToTikZ(slides, size, options = {}) {
+  const sharedColors = new Map()
+  let hasImg = false
+  let hasSvgTikz = false
+  let hasLnk = false
+  const allImages = []
+  const bodies = []
+
+  for (const slide of slides) {
+    const { body, images } = convertSlideToTikZ(slide, size, { ...options, sharedColors })
+    bodies.push(body)
+    if (images.length > 0) hasImg = true
+    if (images.hasSvgTikz) hasSvgTikz = true
+    if (hasLinks(slide.elements || [])) hasLnk = true
+    allImages.push(...images)
+  }
+
+  // Use a registry backed by sharedColors to emit color definitions
+  const registry = new ColorRegistry({ ...options, sharedColors })
+  const preamble = generateContainerPreamble(registry, size, hasImg, hasLnk, hasSvgTikz)
+
+  const body = [
+    '\\begin{document}',
+    bodies.join('\n\\newpage\n'),
+    '\\end{document}',
+    '',
+  ].join('\n')
+
+  return {
+    tex: preamble + body,
+    images: allImages,
   }
 }

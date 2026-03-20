@@ -2,8 +2,8 @@ import { rgbToXcolorExpression } from 'xcolor-rgb-convert'
 
 export class ColorRegistry {
   constructor(options = {}) {
-    this.colors = new Map()
-    this.counter = 0
+    this.colors = options.sharedColors ?? new Map()
+    this.counter = this.colors.size
     this.options = options || {}
   }
 
