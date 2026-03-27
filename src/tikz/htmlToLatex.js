@@ -40,7 +40,7 @@ function decodeHtmlEntities(text) {
 }
 
 function restoreNbsp(text) {
-  return text.replace(/\x00NBSP\x00/g, '~')
+  return text.replace(/\x00NBSP\x00/g, ' ')
 }
 
 function parseStyle(styleStr) {

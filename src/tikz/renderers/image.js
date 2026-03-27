@@ -84,10 +84,6 @@ export function renderImage(element, imageCollector, options = {}) {
   const cx = x + w / 2
   const cy = y - h / 2
 
-  if (options.noImages) {
-    return `  \\draw[dashed, gray] (${pt2cm(x)},${pt2cm(y - h)}) rectangle (${pt2cm(x + w)},${pt2cm(y)});\n  \\node at (${pt2cm(cx)},${pt2cm(cy)}) {\\small [Image]};`
-  }
-
   // Use SVG source if available (renders as native TikZ, no external file needed)
   if (element.svgSrc) {
     const result = renderSvgAsTikz(element, imageCollector, options)
@@ -96,6 +92,10 @@ export function renderImage(element, imageCollector, options = {}) {
       return result
     }
     console.warn(`  [svg2tikz] SVG conversion failed at (${element.left},${element.top}), falling back to PNG`)
+  }
+
+  if (options.noImages) {
+    return `  \\draw[dashed, gray] (${pt2cm(x)},${pt2cm(y - h)}) rectangle (${pt2cm(x + w)},${pt2cm(y)});\n  \\node at (${pt2cm(cx)},${pt2cm(cy)}) {\\small [Image]};`
   }
 
   if (!element.src) {

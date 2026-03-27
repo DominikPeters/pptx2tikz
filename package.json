@@ -20,7 +20,8 @@
   "scripts": {
     "build": "rollup -c",
     "dev": "rollup -c -w",
-    "clean": "rimraf dist"
+    "clean": "rimraf dist",
+    "test": "node --test tests/*.test.js"
   },
   "keywords": [
     "pptx",

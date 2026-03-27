@@ -1,0 +1,62 @@
+\documentclass{article}
+\usepackage[paperwidth=33.8666cm,paperheight=19.0500cm,margin=0pt]{geometry}
+\usepackage{parskip}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{tikz}
+\usepackage{xcolor}
+\usepackage{amsmath,amssymb}
+\usepackage[normalem]{ulem}
+\usetikzlibrary{shapes.geometric,calc,positioning,shadows.blur,patterns,shadings}
+
+\definecolor{clr0}{HTML}{156082}
+\definecolor{clr1}{HTML}{030E13}
+\definecolor{clr2}{HTML}{FFFFFF}
+\definecolor{clr3}{HTML}{83CBEB}
+\begin{document}
+\begin{tikzpicture}[x=1cm, y=1cm]
+  \clip (0,0) rectangle (33.87,19.05);
+  \node[anchor=north west, inner sep=0pt, text width=1.59cm, minimum height=1.03cm, align=left, font=\LARGE] at (4.23,16.51) {Text};
+  \node[anchor=north west, inner sep=0pt, text width=3.32cm, minimum height=1.97cm, align=left, font=\Huge] at (19.90,16.12) {Text!};
+  \filldraw[fill=clr0, draw=clr1, line width=1.5pt] (5.00,7.54) rectangle (12.74,13.12);
+  \node[anchor=center, inner sep=2pt, text width=6.96cm, align=center, font=\LARGE] at (8.87,10.33) {\textcolor[HTML]{FFFFFF}{Text}};
+  % Table at (2.59, 15.48)
+  \fill[fill=clr0] (2.59,2.54) rectangle (10.12,3.57);
+  \draw[draw=clr2, line width=1pt] (2.59,3.57) -- (10.12,3.57);
+  \draw[draw=clr2, line width=1pt] (2.59,2.54) -- (10.12,2.54);
+  \draw[draw=clr2, line width=1pt] (2.59,2.54) -- (2.59,3.57);
+  \draw[draw=clr2, line width=1pt] (10.12,2.54) -- (10.12,3.57);
+  \node[anchor=center, inner sep=2pt, text width=7.38cm, align=left, font=\LARGE] at (6.35,3.06) {a};
+  \fill[fill=clr0] (10.12,2.54) rectangle (17.64,3.57);
+  \draw[draw=clr2, line width=1pt] (10.12,3.57) -- (17.64,3.57);
+  \draw[draw=clr2, line width=1pt] (10.12,2.54) -- (17.64,2.54);
+  \draw[draw=clr2, line width=1pt] (10.12,2.54) -- (10.12,3.57);
+  \draw[draw=clr2, line width=1pt] (17.64,2.54) -- (17.64,3.57);
+  \node[anchor=center, inner sep=2pt, text width=7.38cm, align=left, font=\LARGE] at (13.88,3.06) {b};
+  \fill[fill=clr0] (17.64,2.54) rectangle (25.17,3.57);
+  \draw[draw=clr2, line width=1pt] (17.64,3.57) -- (25.17,3.57);
+  \draw[draw=clr2, line width=1pt] (17.64,2.54) -- (25.17,2.54);
+  \draw[draw=clr2, line width=1pt] (17.64,2.54) -- (17.64,3.57);
+  \draw[draw=clr2, line width=1pt] (25.17,2.54) -- (25.17,3.57);
+  \node[anchor=center, inner sep=2pt, text width=7.38cm, align=left, font=\LARGE] at (21.41,3.06) {c};
+  \fill[fill=clr3] (2.59,1.51) rectangle (10.12,2.54);
+  \draw[draw=clr2, line width=1pt] (2.59,2.54) -- (10.12,2.54);
+  \draw[draw=clr2, line width=1pt] (2.59,1.51) -- (10.12,1.51);
+  \draw[draw=clr2, line width=1pt] (2.59,1.51) -- (2.59,2.54);
+  \draw[draw=clr2, line width=1pt] (10.12,1.51) -- (10.12,2.54);
+  \node[anchor=center, inner sep=2pt, text width=7.38cm, align=left, font=\LARGE] at (6.35,2.02) {d};
+  \fill[fill=clr3] (10.12,1.51) rectangle (17.64,2.54);
+  \draw[draw=clr2, line width=1pt] (10.12,2.54) -- (17.64,2.54);
+  \draw[draw=clr2, line width=1pt] (10.12,1.51) -- (17.64,1.51);
+  \draw[draw=clr2, line width=1pt] (10.12,1.51) -- (10.12,2.54);
+  \draw[draw=clr2, line width=1pt] (17.64,1.51) -- (17.64,2.54);
+  \node[anchor=center, inner sep=2pt, text width=7.38cm, align=left, font=\LARGE] at (13.88,2.02) {e};
+  \fill[fill=clr3] (17.64,1.51) rectangle (25.17,2.54);
+  \draw[draw=clr2, line width=1pt] (17.64,2.54) -- (25.17,2.54);
+  \draw[draw=clr2, line width=1pt] (17.64,1.51) -- (25.17,1.51);
+  \draw[draw=clr2, line width=1pt] (17.64,1.51) -- (17.64,2.54);
+  \draw[draw=clr2, line width=1pt] (25.17,1.51) -- (25.17,2.54);
+  \node[anchor=center, inner sep=2pt, text width=7.38cm, align=left, font=\LARGE] at (21.41,2.02) {f};
+  \node[anchor=north west, inner sep=0pt, text width=14.50cm, minimum height=7.95cm, align=left, font=\LARGE] at (17.67,10.93) {Lorem ipsum dolor sitamet,consectetur adipiscing elit, sed doeiusmod tempor incididunt utlabore et dolore magnaaliqua. Utenimad minimveniam, quisnostrudexercitationullamco laborisnisiut aliquipexea commodo consequat. Duisaute iruredolor inreprehenderitinvoluptate velitessecillumdoloreeu fugiat nulla pariatur.Excepteur sint occaecat cupidatatnonproident, sunt in culpa quiofficia deserunt mollit animid estlaborum.};
+\end{tikzpicture}
+\end{document}
