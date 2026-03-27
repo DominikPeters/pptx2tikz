@@ -132,9 +132,13 @@ export function renderShape(element, registry, options = {}) {
   }
 
   // Add text content if present
-  const content = htmlToLatex(element.content, registry, options)
+  const textResult = htmlToLatex(element.content, registry, options)
+  const content = textResult.content
   if (content.trim()) {
     const textOpts = ['anchor=center', 'inner sep=2pt', `text width=${c(w * 0.9)}cm`]
+    if (textResult.nodeTextOptions?.length) {
+      textOpts.push(...textResult.nodeTextOptions)
+    }
     lines.push(`${indent}\\node[${textOpts.join(', ')}] at (${c(cx)},${c(cy)}) {${content}};`)
   }
 

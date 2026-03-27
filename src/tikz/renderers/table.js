@@ -65,10 +65,15 @@ export function renderTable(element, registry, options = {}) {
       }
 
       // Cell text
-      const content = htmlToLatex(cell.text, registry, options)
+      const textResult = htmlToLatex(cell.text, registry, options)
+      const content = textResult.content
       if (content.trim()) {
         const textW = cx2 - cx1 - 4
-        lines.push(`  \\node[anchor=center, inner sep=2pt, text width=${pt2cm(textW)}cm] at (${pt2cm(midX)},${pt2cm(midY)}) {${content}};`)
+        const textOpts = ['anchor=center', 'inner sep=2pt', `text width=${pt2cm(textW)}cm`]
+        if (textResult.nodeTextOptions?.length) {
+          textOpts.push(...textResult.nodeTextOptions)
+        }
+        lines.push(`  \\node[${textOpts.join(', ')}] at (${pt2cm(midX)},${pt2cm(midY)}) {${content}};`)
       }
     }
   }

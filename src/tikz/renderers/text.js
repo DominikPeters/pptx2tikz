@@ -4,12 +4,16 @@ import { fillToTikz } from '../utils/fill.js'
 import { pt2cm } from '../utils/transform.js'
 
 export function renderText(element, registry, options = {}) {
-  const content = htmlToLatex(element.content, registry, options)
+  const textResult = htmlToLatex(element.content, registry, options)
+  const content = textResult.content
   if (!content.trim()) return ''
 
   const opts = ['anchor=north west', 'inner sep=0pt']
   opts.push(`text width=${pt2cm(element.width)}cm`)
   opts.push(`minimum height=${pt2cm(element.height)}cm`)
+  if (textResult.nodeTextOptions?.length) {
+    opts.push(...textResult.nodeTextOptions)
+  }
 
   const fillInfo = fillToTikz(element.fill, registry)
   if (fillInfo.options) opts.push(fillInfo.options)
@@ -19,7 +23,8 @@ export function renderText(element, registry, options = {}) {
 
   if (element.vAlign === 'mid') {
     opts.push(`minimum height=${pt2cm(element.height)}cm`)
-    opts.push('align=center')
+    const hasAlignOption = opts.some(opt => opt.startsWith('align='))
+    if (!hasAlignOption) opts.push('align=center')
   }
 
   const lines = []

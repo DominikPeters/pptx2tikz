@@ -12,6 +12,19 @@ const SPECIAL_MAP = {
   '\\': '\\textbackslash{}',
 }
 
+const LATEX_SIZE_COMMANDS = [
+  { command: '\\tiny', pt: 5 },
+  { command: '\\scriptsize', pt: 7 },
+  { command: '\\footnotesize', pt: 8 },
+  { command: '\\small', pt: 9 },
+  { command: '\\normalsize', pt: 10 },
+  { command: '\\large', pt: 12 },
+  { command: '\\Large', pt: 14.4 },
+  { command: '\\LARGE', pt: 17.28 },
+  { command: '\\huge', pt: 20.74 },
+  { command: '\\Huge', pt: 24.88 },
+]
+
 function escapeLatex(text) {
   return text.replace(LATEX_SPECIAL, ch => SPECIAL_MAP[ch])
 }
@@ -41,6 +54,137 @@ function parseStyle(styleStr) {
     if (key && val) props[key] = val
   }
   return props
+}
+
+function parseFontSizePt(fontSize) {
+  if (!fontSize) return null
+  const match = fontSize.match(/([\d.]+)\s*pt/i)
+  if (!match) return null
+  const value = parseFloat(match[1])
+  return Number.isFinite(value) ? value : null
+}
+
+function normalizeAlign(align) {
+  if (!align) return null
+  const value = align.trim().toLowerCase()
+  if (value === 'center') return 'center'
+  if (value === 'right') return 'right'
+  if (value === 'left') return 'left'
+  return 'unsupported'
+}
+
+function stripTags(text) {
+  return text.replace(/<[^>]*>/g, '')
+}
+
+function hasVisibleText(text) {
+  const decoded = decodeHtmlEntities(stripTags(text))
+    .replace(/\x00NBSP\x00/g, ' ')
+    .replace(/\s+/g, '')
+  return decoded.length > 0
+}
+
+function detectUniformTextOptions(html) {
+  const paragraphRe = /<p(?:\s+style="([^"]*)")?\s*>([\s\S]*?)<\/p>/g
+  const paragraphs = []
+  let paragraphMatch
+  while ((paragraphMatch = paragraphRe.exec(html)) !== null) {
+    paragraphs.push({
+      style: parseStyle(paragraphMatch[1]),
+      innerHtml: paragraphMatch[2],
+    })
+  }
+
+  if (paragraphs.length === 0) {
+    paragraphs.push({ style: {}, innerHtml: html })
+  }
+
+  let sawExplicitAlign = false
+  let sawUnsupportedAlign = false
+  let sawMissingAlign = false
+  const alignValues = new Set()
+
+  let sawExplicitFontSize = false
+  let sawText = false
+  let sawUnknownFontSize = false
+  const fontSizes = new Set()
+
+  const registerTextSegment = (segment, sizePt) => {
+    if (!hasVisibleText(segment)) return
+    sawText = true
+    if (sizePt == null) {
+      sawUnknownFontSize = true
+      return
+    }
+    fontSizes.add(sizePt.toFixed(4))
+  }
+
+  for (const paragraph of paragraphs) {
+    const align = normalizeAlign(paragraph.style['text-align'])
+    if (paragraph.style['text-align']) {
+      sawExplicitAlign = true
+      if (align === 'unsupported') sawUnsupportedAlign = true
+      else alignValues.add(align)
+    } else if (hasVisibleText(paragraph.innerHtml)) {
+      sawMissingAlign = true
+    }
+
+    const paragraphFontSize = parseFontSizePt(paragraph.style['font-size'])
+    if (paragraphFontSize != null) sawExplicitFontSize = true
+
+    const spanRe = /<span(?:\s+style="([^"]*)")?\s*>([\s\S]*?)<\/span>/g
+    let lastIndex = 0
+    let spanMatch
+    while ((spanMatch = spanRe.exec(paragraph.innerHtml)) !== null) {
+      if (spanMatch.index > lastIndex) {
+        const before = paragraph.innerHtml.slice(lastIndex, spanMatch.index)
+        registerTextSegment(before, paragraphFontSize)
+      }
+
+      const spanStyle = parseStyle(spanMatch[1])
+      const spanFontSize = parseFontSizePt(spanStyle['font-size'])
+      if (spanFontSize != null) sawExplicitFontSize = true
+      registerTextSegment(spanMatch[2], spanFontSize ?? paragraphFontSize)
+
+      lastIndex = spanMatch.index + spanMatch[0].length
+    }
+
+    if (lastIndex < paragraph.innerHtml.length) {
+      registerTextSegment(paragraph.innerHtml.slice(lastIndex), paragraphFontSize)
+    }
+  }
+
+  let uniformAlign = null
+  if (sawExplicitAlign && !sawUnsupportedAlign && !sawMissingAlign && alignValues.size === 1) {
+    uniformAlign = [...alignValues][0]
+  }
+
+  let uniformFontSizePt = null
+  if (sawExplicitFontSize && sawText && !sawUnknownFontSize && fontSizes.size === 1) {
+    uniformFontSizePt = parseFloat([...fontSizes][0])
+  }
+
+  return {
+    uniformAlign,
+    uniformFontSizePt,
+    alignmentNeedsInlineFallback: sawExplicitAlign && uniformAlign == null,
+    fontSizeNeedsInlineFallback: sawExplicitFontSize && uniformFontSizePt == null,
+  }
+}
+
+export function mapPtToLatexSizeCommand(sizePt) {
+  if (!Number.isFinite(sizePt)) return '\\normalsize'
+  const EPSILON = 1e-9
+  let best = LATEX_SIZE_COMMANDS[0]
+  let bestDistance = Math.abs(sizePt - best.pt)
+  for (const candidate of LATEX_SIZE_COMMANDS.slice(1)) {
+    const distance = Math.abs(sizePt - candidate.pt)
+    if (distance + EPSILON < bestDistance || (Math.abs(distance - bestDistance) <= EPSILON && candidate.pt > best.pt)) {
+      best = candidate
+      bestDistance = distance
+    }
+  }
+  return best.command
 }
 
 function wrapWithFormatting(text, style, registry, options = {}) {
@@ -82,10 +226,9 @@ function wrapWithFormatting(text, style, registry, options = {}) {
   }
 
   const fontSize = style['font-size']
-  if (fontSize) {
-    const match = fontSize.match(/([\d.]+)pt/)
-    if (match) {
-      const size = parseFloat(match[1])
+  if (options.inlineFontSize !== false && fontSize) {
+    const size = parseFontSizePt(fontSize)
+    if (size != null) {
       const skip = (size * 1.2).toFixed(1)
       result = `{\\fontsize{${size}}{${skip}}\\selectfont ${result}}`
     }
@@ -96,7 +239,7 @@ function wrapWithFormatting(text, style, registry, options = {}) {
 
 function processSpans(html, registry, options = {}) {
   let result = ''
-  const spanRe = /<span\s+style="([^"]*)">([\s\S]*?)<\/span>/g
+  const spanRe = /<span(?:\s+style="([^"]*)")?\s*>([\s\S]*?)<\/span>/g
   let lastIndex = 0
   let match
 
@@ -132,7 +275,7 @@ function processSpans(html, registry, options = {}) {
 
 function processListBlock(html, listTag, registry, options = {}) {
   const items = []
-  const liRe = /<li\s+style="([^"]*)">([\s\S]*?)<\/li>/g
+  const liRe = /<li(?:\s+style="([^"]*)")?\s*>([\s\S]*?)<\/li>/g
   let match
   while ((match = liRe.exec(html)) !== null) {
     items.push(processSpans(match[2], registry, options))
@@ -148,13 +291,24 @@ function processListBlock(html, listTag, registry, options = {}) {
 }
 
 export function htmlToLatex(html, registry, options = {}) {
-  if (!html) return ''
+  if (!html) return { content: '', nodeTextOptions: [], usesInlineFormatting: false }
+
+  const styleDetection = detectUniformTextOptions(html)
+  const inlineOptions = {
+    ...options,
+    inlineParagraphAlignment: styleDetection.uniformAlign == null,
+    inlineFontSize: styleDetection.uniformFontSizePt == null,
+  }
+
+  const nodeTextOptions = []
+  if (styleDetection.uniformAlign) {
+    nodeTextOptions.push(`align=${styleDetection.uniformAlign}`)
+  }
+  if (styleDetection.uniformFontSizePt != null) {
+    nodeTextOptions.push(`font=${mapPtToLatexSizeCommand(styleDetection.uniformFontSizePt)}`)
+  }
 
   const blocks = []
-
-  const blockRe = /<(p|ul|ol|li)\s*(?:style="([^"]*)")?\s*>([\s\S]*?)<\/\1>/g
-  let match
-  let lastIndex = 0
 
   // Check for list wrappers
   const listWrapperRe = /<(ul|ol)>([\s\S]*?)<\/\1>/g
@@ -165,7 +319,7 @@ export function htmlToLatex(html, registry, options = {}) {
     processedRanges.push({
       start: listMatch.index,
       end: listMatch.index + listMatch[0].length,
-      content: processListBlock(listMatch[2], listMatch[1], registry, options),
+      content: processListBlock(listMatch[2], listMatch[1], registry, inlineOptions),
     })
   }
 
@@ -174,25 +328,29 @@ export function htmlToLatex(html, registry, options = {}) {
     for (const range of processedRanges) {
       const before = html.slice(pos, range.start)
       if (before.trim()) {
-        blocks.push(...processParagraphs(before, registry, options))
+        blocks.push(...processParagraphs(before, registry, inlineOptions))
       }
       blocks.push(range.content)
       pos = range.end
     }
     const after = html.slice(pos)
     if (after.trim()) {
-      blocks.push(...processParagraphs(after, registry, options))
+      blocks.push(...processParagraphs(after, registry, inlineOptions))
     }
   } else {
-    blocks.push(...processParagraphs(html, registry, options))
+    blocks.push(...processParagraphs(html, registry, inlineOptions))
   }
 
-  return blocks.join('\n')
+  return {
+    content: blocks.join('\n'),
+    nodeTextOptions,
+    usesInlineFormatting: styleDetection.alignmentNeedsInlineFallback || styleDetection.fontSizeNeedsInlineFallback,
+  }
 }
 
 function processParagraphs(html, registry, options = {}) {
   const blocks = []
-  const pRe = /<p\s+style="([^"]*)">([\s\S]*?)<\/p>/g
+  const pRe = /<p(?:\s+style="([^"]*)")?\s*>([\s\S]*?)<\/p>/g
   let match
 
   while ((match = pRe.exec(html)) !== null) {
@@ -200,9 +358,9 @@ function processParagraphs(html, registry, options = {}) {
     const content = processSpans(match[2], registry, options)
     const align = style['text-align']
 
-    if (align === 'center') {
+    if (options.inlineParagraphAlignment !== false && align === 'center') {
       blocks.push(`{\\centering ${content}\\par}`)
-    } else if (align === 'right') {
+    } else if (options.inlineParagraphAlignment !== false && align === 'right') {
       blocks.push(`{\\raggedleft ${content}\\par}`)
     } else {
       blocks.push(content)
