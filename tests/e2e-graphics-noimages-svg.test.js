@@ -11,6 +11,7 @@ test('e2e: --no-images keeps SVG conversion for graphics.pptx', () => {
   })
 
   assert.match(tex, /use as bounding box/)
-  assert.match(tex, /\\begin\{tikzpicture\}/)
+  assert.match(tex, /begin\{scope\}\[shift=/)
+  assert.doesNotMatch(tex, /\\resizebox/)
   assert.doesNotMatch(tex, /\[Image\]/)
 })

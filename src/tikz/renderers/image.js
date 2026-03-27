@@ -34,12 +34,10 @@ function renderSvgAsTikz(element, imageCollector, options) {
   const bodyMatch = tikzFull.match(/\\begin\{tikzpicture\}(?:\[[\s\S]*?\])?([\s\S]*?)\\end\{tikzpicture\}/)
   if (!bodyMatch) return null
 
-  // svg2tikz maps the viewBox to x ∈ [0,10], y ∈ [0, 10*svgH/svgW] (in cm).
-  // Force the inner tikzpicture's TeX bounding box to exactly this extent so that
-  // \resizebox scales relative to the full viewBox, not the tight drawn-content box.
-  const tikzH = (10 * vb.h / vb.w).toFixed(4)
-  const bbLine = `  \\path[use as bounding box] (0,0) rectangle (10,${tikzH});`
-  const body = bbLine + '\n' + bodyMatch[1].trim()
+  // svg2tikz maps the viewBox to x ∈ [0,10], y ∈ [0, 10*svgH/svgW].
+  // Keep these native coordinates and apply a scope transform to the target box.
+  const tikzH = 10 * vb.h / vb.w
+  const body = bodyMatch[1].trim()
 
   imageCollector.hasSvgTikz = true
 
@@ -60,14 +58,17 @@ function renderSvgAsTikz(element, imageCollector, options) {
   }
 
   const indent = needsScope ? '    ' : '  '
-  // anchor=north west places the top-left corner at (x, y) in y-up coordinates
-  lines.push(`${indent}\\node[inner sep=0pt, anchor=north west] at (${pt2cm(x)},${pt2cm(y)}) {%`)
-  lines.push(`${indent}  \\resizebox{${pt2cm(w)}cm}{${pt2cm(h)}cm}{%`)
-  lines.push(`${indent}  \\begin{tikzpicture}[x=1cm, y=1cm]`)
-  lines.push(body)
-  lines.push(`${indent}  \\end{tikzpicture}%`)
-  lines.push(`${indent}  }%`)
-  lines.push(`${indent}};`)
+  const sx = (w / 28.3465 / 10).toFixed(6)
+  const sy = (h / 28.3465 / tikzH).toFixed(6)
+  const x0 = pt2cm(x)
+  const y0 = pt2cm(y - h)
+
+  lines.push(`${indent}\\begin{scope}[shift={({${x0},${y0}})}, xscale=${sx}, yscale=${sy}]`)
+  lines.push(`${indent}  \\path[use as bounding box] (0,0) rectangle (10,${tikzH.toFixed(4)});`)
+  for (const line of body.split('\n')) {
+    lines.push(`${indent}  ${line}`)
+  }
+  lines.push(`${indent}\\end{scope}`)
 
   if (needsScope) {
     lines.push(`  \\end{scope}`)
